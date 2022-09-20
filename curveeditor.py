@@ -109,7 +109,9 @@ def cardinal():
     # This is a Cardinal Hermite (Cubic) Spline curve. This means we essentially break up the
     # curve into sections comprising of 2 points each, and provide each point with a single slope
     # so that each section joins smoothly. With each section having 2 points and 2 slopes, we can
-    # fit a unique cubic polynomial through it.
+    # fit a unique cubic polynomial through it. Note: An alternative approach would be using the
+    # Bézier viewpoint, i.e. generating 2 additional Bézier control points per segment using the
+    # 2 slopes and 2 points and doing the 1/3 thing, but this would result in the exact same spline.
     global points, tension
     assert len(points) >= 4
 
@@ -133,6 +135,7 @@ def cardinal():
             curve_points.extend(addend1 + addend2 + addend3 + addend4)
 
     return curve_points
+
 
 def bézier():
     # This is an implementation of the De-Casteljau Algorithm for computing the
