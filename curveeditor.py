@@ -3,17 +3,17 @@ import math
 import numpy as np
 
 # Window size
-n = 700
-window_w = int(n)
-window_h = int(n)
+window_w = 1720
+window_h = 1000
 
-# Tkinter Setup
+# Tkinter Setupc
 root = Tk()
 root.title("Curve Fun")
 root.attributes("-topmost", True)
 root.geometry(str(window_w) + "x" + str(window_h))  # window size hardcoded
 
 w = Canvas(root, width=window_w, height=window_h)
+w.configure(background='white')
 w.focus_set()
 w.pack()
 
@@ -21,13 +21,10 @@ w.pack()
 points = []
 
 # Interpolation / Approximation scheme (-1 = none)
-scheme = -1
-
-# Key Map (maps keys to schemes)
-key_map = {'x': -1, 'l': 0, 'c': 1, 'b': 2, 's': 3}
+scheme = 0
 
 # Scheme Names
-scheme_names = {-1: 'NONE', 0: 'LAGRANGE', 1: 'CATMULL-ROM', 2:'BÉZIER', 3:'B-SPLINE'}
+scheme_names = {0: 'NONE', 1: 'LAGRANGE', 2: 'CUBIC BÉZIER / CUBIC HERMITE', 3: 'BÉZIER APPROX', 4: 'B-SPLINE APPROX'}
 
 # GUI Params
 point_radius = 5
@@ -43,29 +40,28 @@ point_dragged_index = -1
 # Which point is the user currently hovering over? (-1 if none)
 point_hovered_index = -1
 
+
 # SCHEME IMPLEMENTATION —————————————————————————————————————
 def get_curve_points(scheme):
     '''
         Takes in an interpolation scheme, and returns a set of sampled points from resulting curve's function.
         0 = Lagrange
     '''
-    assert scheme != -1
-
-    # Number of points
-    n = len(points)
+    assert scheme != 0
 
     # Lagrange Interpolation
-    if scheme == 0:
+    if scheme == 1:
         return lagrange()
 
-    if scheme == 1:
-        return catmull()
-
     if scheme == 2:
-        return bézier()
+        return cardinal()
 
     if scheme == 3:
+        return bézier()
+
+    if scheme == 4:
         return bspline()
+
 
 def lagrange():
     global points
@@ -107,12 +103,14 @@ def lagrange():
 
     return curve_points
 
-def catmull():
-    # This is a Catmull-Rom Hermite (Cubic) Spline curve. This means we essentially break up the
+
+tension = 0.5
+def cardinal():
+    # This is a Cardinal Hermite (Cubic) Spline curve. This means we essentially break up the
     # curve into sections comprising of 2 points each, and provide each point with a single slope
     # so that each section joins smoothly. With each section having 2 points and 2 slopes, we can
     # fit a unique cubic polynomial through it.
-    global points
+    global points, tension
     assert len(points) >= 4
 
     # Starting with the second point and working our way to the second to last point, we directly
@@ -123,7 +121,7 @@ def catmull():
         p0, p1, p2, p3 = points[idx-1], points[idx], points[idx+1], points[idx+2]
 
         # Slope vector calculation
-        m1, m2 = p2 - p0, p3 - p1
+        m1, m2 = (p2 - p0) * tension, (p3 - p1) * tension
 
         # Hermite (cubic) interpolation
         dt = 0.01
@@ -143,10 +141,11 @@ def bézier():
 
     curve_points = []
     dt = 0.005
-    for t in np.arange(0, 1, dt):
+    for t in np.arange(0, 1+dt, dt):
         curve_points.extend(casteljau(t, points))
 
     return curve_points
+
 
 # Recursive helper function for the above.
 def casteljau(t, points):
@@ -249,6 +248,7 @@ def uniform_knots():
     global points, degree
     return [i for i in range(0, degree + len(points) + 1)]
 
+
 # Padded Knots
 def padded_uniform_knots():
     global points, degree
@@ -264,24 +264,38 @@ def padded_uniform_knots():
 
 # KEY METHODS ———————————————————————————————————————————————
 def key_pressed(event):
-    global key_map, scheme
+    global scheme, tension
 
     # Change scheme if valid key.
     try:
-        scheme = key_map[event.char]
-        w.itemconfig('scheme_text', text='Scheme: ' + scheme_names[scheme])
-    except KeyError:
-        print('Not a valid key.')
+        scheme = int(event.char)  # Might throw ValueError
+        w.itemconfig('scheme_text', text='Scheme: ' + scheme_names[scheme])  # Might throw KeyError
+    except (KeyError, ValueError):
+        if not (scheme == 2 and event.char in {'o', 'p'}):
+            print('Not a valid key.')
 
     # Do the interpolation based on the current scheme.
-    if scheme != -1:
+    if scheme != 0:
         w.delete('line')
         w.delete('knot_line')
-        w.create_line(get_curve_points(scheme), tags='line')
+        w.delete('tension_text')
+        w.create_line(get_curve_points(scheme), fill='red', width=2, tags='line')
+
+        if scheme == 2:
+            w.create_text(window_w/2, 60, text='Tension='+str(np.round(tension, decimals=2))+". Use O/P to change.", fill='blue', font='Avenir 30', tags='tension_text')
 
     else:
         w.delete('knot_line')
         w.delete('line')
+
+    # If Cardinal spline and 'O' or 'P' pressed, change tension parameter.
+    dtau = 0.1
+    if scheme == 2:
+        if event.char == 'o':
+            tension = min(max(0, tension - dtau), 1)
+        elif event.char == 'p':
+            tension = min(max(0, tension + dtau), 1)
+
 
 # END KEY METHODS ———————————————————————————————————————————
 
@@ -306,9 +320,9 @@ def mouse_click(event):
                       fill=point_fill, outline=point_outline, tags='pt_'+str(len(points)-1))
 
         # Recalculate and redraw curve if scheme is selected
-        if scheme != -1:
+        if scheme != 0:
             w.delete('line')
-            w.create_line(get_curve_points(scheme), tags='line')
+            w.create_line(get_curve_points(scheme), fill='red', width=2, tags='line')
 
 
 def mouse_release(event):
@@ -329,9 +343,9 @@ def left_drag(event):
         points[point_dragged_index] = np.array([event.x, event.y])
 
         # Recalculate and redraw curve, if needed
-        if scheme != -1:
+        if scheme != 0:
             w.delete('line')
-            w.create_line(get_curve_points(scheme), tags='line')
+            w.create_line(get_curve_points(scheme), fill='red', width=2, tags='line')
 
 
 def motion(event):
@@ -367,12 +381,11 @@ w.bind('<Key>', key_pressed)
 
 # Display informational text
 key_map_text = ''
-for key in key_map.keys():
-    name = scheme_names[key_map[key]]
-    key_map_text += name.upper() + ': ' + key.upper() + '    '
+for key, val in scheme_names.items():
+    key_map_text += str(key).upper() + ': ' + val.upper() + '    '
 
-w.create_text(window_w/2, window_h - 20, text=key_map_text, fill='red', font='Avenir 20')
-w.create_text(window_w/2, 20, text='Scheme: NONE', fill='black', font='Avenir 20', tags='scheme_text')
+w.create_text(window_w/2, window_h - 25, text=key_map_text, fill='red', font='Avenir 30')
+w.create_text(window_w/2, 25, text='SCHEME: NONE', fill='black', font='Avenir 30', tags='scheme_text')
 
 # Create the line object
 w.create_line(-1, -1, -2, -2, tags='line')
