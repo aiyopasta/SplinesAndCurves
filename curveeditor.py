@@ -24,7 +24,7 @@ points = []
 scheme = 0
 
 # Scheme Names
-scheme_names = {0: 'NONE', 1: 'LAGRANGE', 2: 'CUBIC BÉZIER / CUBIC HERMITE', 3: 'BÉZIER APPROX', 4: 'B-SPLINE APPROX'}
+scheme_names = {0: 'NONE', 1: 'LAGRANGE', 2: 'CUBIC BÉZIER / CUBIC HERMITE', 3: 'SINGLE BÉZIER', 4: 'B-SPLINE APPROX'}
 
 # GUI Params
 point_radius = 5
@@ -68,7 +68,9 @@ def lagrange():
 
     # Figure out where to put the t_i which make the Lagrange polynomials spike.
     # We do this by calculating the total length of a linear connection between all the points
-    # and seeing how much each segment contributes to the total length.
+    # and seeing how much each segment contributes to the total length. Note that the curve
+    # computed using this method is the exact same as if we were to invert the Vandermonde
+    # matrix. "The polynomial stays the same, the basis functions are different."
     ti_list = []
 
     total_dist = 0
@@ -89,7 +91,7 @@ def lagrange():
     dt = 0.005
     for idx in range(0, len(ti_list) - 1):
         t1, t2 = ti_list[idx], ti_list[idx + 1]
-        for t in np.arange(t1, t2, dt):
+        for t in np.arange(t1, t2+dt, dt):
             summation = np.array([0., 0.])
             for i, ti in enumerate(ti_list):
                 prod = 1
@@ -186,8 +188,6 @@ def bspline():
     # Build the desired knot vector. Replace the functions with whatever is desired (e.g. padded_knots()).
     knot_vector_x = padded_uniform_knots()
     knot_vector_y = padded_uniform_knots()
-
-    print(knot_vector_x)
 
     # Parametric domain is [0, b]
     b = degree + len(points)
