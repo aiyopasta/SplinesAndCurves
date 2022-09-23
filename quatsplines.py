@@ -1,6 +1,7 @@
 from tkinter import *
 import numpy as np
 import time
+from quat import *
 
 # Window size
 window_w = 1720
@@ -16,8 +17,8 @@ w = Canvas(root, width=window_w, height=window_h)
 w.pack()
 
 # Coordinate Shift
-def A(x, y):
-    return np.array([x + window_w/2, -y + window_h/2])
+# def A(x, y):
+#     return np.array([x + window_w/2, -y + window_h/2])
 
 # Key handling function
 def vanilla_key_pressed(event):
@@ -95,47 +96,47 @@ w.bind("<1>", lambda event: w.focus_set())
 w.pack()
 
 # ye parameters (rho = distance from origin, phi = angle from world's +z-axis, theta = angle from world's +x-axis)
-rho, theta, phi = 1000., np.pi/4, np.pi/4  # These provide location of the eye.
+rho, theta, phi = 700., np.pi/4, np.pi/4  # These provide location of the eye.
 v_rho, v_theta, v_phi = 0, 0, 0
 focus = 500.  # Distance from eye to near clipping plane, i.e. the screen.
 far_clip = rho * 3  # Distance from eye to far clipping plane
 assert far_clip > focus
 
-# Old world_to_plane() method from Winter 2019-2020
-def old_world_to_plane(v):
-    # Radial distance to eye from world's origin.
-    eye_rho = rho + focus
-
-    # Vector math from geometric computation (worked out on white board, check iCloud for possible picture)
-    # It is just converting from spherical to Cartesian coordinates, then flipping it because it is "eye to origin".
-    eye_to_origin = -np.array([eye_rho * np.sin(phi) * np.cos(theta),
-                               eye_rho * np.sin(phi) * np.sin(theta), eye_rho * np.cos(phi)])
-
-    # Vector from eye to the point in question.
-    eye_to_v = eye_to_origin + v
-
-    # Vector from origin to the center of the screen in front of eye.
-    origin_to_P = np.array([rho * np.sin(phi) * np.cos(theta), rho * np.sin(phi) * np.sin(theta), rho * np.cos(phi)])
-
-    # Formula for t corresponding to point on line from eye to v that intersects screen: t = (n•(a-b)) / (n•v)
-    # n•(r_t - origin_to_P)=0  <=>  n•(v + (t*eye_to_v) - origin_to_P)=0  <=>  the result!
-    t = np.dot(eye_to_origin, origin_to_P - v) / np.dot(eye_to_origin, eye_to_v)
-    r_t = v + (t * eye_to_v)  # The actual point of intersection
-
-    # Location of image coords in terms of world coordinates.
-    # Vector from the center of the screen to the intersection point.
-    tile_center_world = -origin_to_P + r_t
-
-    # Spherical basis vectors (coincidentally phi_hat is downwards but +'ve direction in image plane is also downwards)
-    # Convert it into the screen local coordinates of x pointing to the right and y pointing down.
-    theta_hat = np.array([-np.sin(theta), np.cos(theta), 0])
-    phi_hat = -np.array([np.cos(phi) * np.cos(theta), np.cos(phi) * np.sin(theta), -np.sin(phi)])
-    tile_center = np.array([np.dot(tile_center_world, theta_hat), np.dot(tile_center_world, phi_hat)])
-
-    # Re-adjust to make center of screen (0,0) and y pointing up.
-    tile_center = A(*tile_center)
-
-    return tile_center
+# # Old world_to_plane() method from Winter 2019-2020
+# def old_world_to_plane(v):
+#     # Radial distance to eye from world's origin.
+#     eye_rho = rho + focus
+#
+#     # Vector math from geometric computation (worked out on white board, check iCloud for possible picture)
+#     # It is just converting from spherical to Cartesian coordinates, then flipping it because it is "eye to origin".
+#     eye_to_origin = -np.array([eye_rho * np.sin(phi) * np.cos(theta),
+#                                eye_rho * np.sin(phi) * np.sin(theta), eye_rho * np.cos(phi)])
+#
+#     # Vector from eye to the point in question.
+#     eye_to_v = eye_to_origin + v
+#
+#     # Vector from origin to the center of the screen in front of eye.
+#     origin_to_P = np.array([rho * np.sin(phi) * np.cos(theta), rho * np.sin(phi) * np.sin(theta), rho * np.cos(phi)])
+#
+#     # Formula for t corresponding to point on line from eye to v that intersects screen: t = (n•(a-b)) / (n•v)
+#     # n•(r_t - origin_to_P)=0  <=>  n•(v + (t*eye_to_v) - origin_to_P)=0  <=>  the result!
+#     t = np.dot(eye_to_origin, origin_to_P - v) / np.dot(eye_to_origin, eye_to_v)
+#     r_t = v + (t * eye_to_v)  # The actual point of intersection
+#
+#     # Location of image coords in terms of world coordinates.
+#     # Vector from the center of the screen to the intersection point.
+#     tile_center_world = -origin_to_P + r_t
+#
+#     # Spherical basis vectors (coincidentally phi_hat is downwards but +'ve direction in image plane is also downwards)
+#     # Convert it into the screen local coordinates of x pointing to the right and y pointing down.
+#     theta_hat = np.array([-np.sin(theta), np.cos(theta), 0])
+#     phi_hat = -np.array([np.cos(phi) * np.cos(theta), np.cos(phi) * np.sin(theta), -np.sin(phi)])
+#     tile_center = np.array([np.dot(tile_center_world, theta_hat), np.dot(tile_center_world, phi_hat)])
+#
+#     # Re-adjust to make center of screen (0,0) and y pointing up.
+#     tile_center = A(*tile_center)
+#
+#     return tile_center
 
 
 # Input: A point in 3D world space. Output: Corresponding point in range [-width/2, width/2]x[-height/2, height/2].
@@ -162,10 +163,6 @@ def world_to_plane(v):
     v_screen = np.dot(cam_to_screen, v_cam)
     v_screen /= v_screen[3]  # division by z
     return (v_screen[:2] * np.array([1, -1])) + np.array([window_w/2, window_h/2])
-
-
-
-
 
 
 def draw_cube(sidelen=400, vertex_radius=5):
@@ -204,11 +201,10 @@ def draw_cube(sidelen=400, vertex_radius=5):
 
 
 # TODO: Update name with actual type of sphere
-def draw_sphere(center, radius, subdivs, color, tag, w):
+def draw_uvsphere(center, radius, subdivs, color, tag, w):
     dtheta, dphi = 2 * np.pi / subdivs, 2 * np.pi / subdivs
 
     # Vertex radius
-    vr = 5
     v_npole = world_to_plane(center + np.array([0, 0, radius]))
     v_spole = world_to_plane(center - np.array([0, 0, radius]))
     middle_verts = [[v_npole]]
@@ -274,7 +270,7 @@ def run():
         # Sphere Drawing –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
         center, radius, subdivs = np.array([0, 0, 0]), 300, 20
         if show_sphere:
-            draw_sphere(center, radius, subdivs, 'orange', 'potty', w)
+            draw_uvsphere(center, radius, subdivs, _from_rgb((90, 30, 0)), 'potty', w)
 
         # End run
         w.update()
