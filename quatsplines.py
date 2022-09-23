@@ -247,7 +247,11 @@ def draw_uvsphere(center, radius, subdivs, color, tag, w):
 # Construct list of orientations (in the form of Euler Angle triples (theta_z, theta_y, theta_x), i.e. zyx order)
 # To be absolutely clear: This means rotation about z-axis by theta_z, followed by rot about LOCAL y-axis by theta_y,
 # followed finally by rot about LOCAL x-axis by theta_x.
-euler_list = [(0, np.pi/4, 0), (0, 0, np.pi/2)]
+# NOTE: We assume these points are uniformly spaced over time.
+# TODO: Fix bug where if orientations are opposite quaternions screw up.
+# TODO: They also screw up if one of the Euler angle points are (0, 0, 0).
+# euler_list = [(0, np.pi/4, 0), (0, 0, np.pi/2)]
+euler_list = [(0, np.pi/4, 0), (0, np.pi/2, 0), (np.pi/3, 0, 0), (0, 0, -np.pi/3), (0, 0, np.pi/4), (0, 0, np.pi/2)]
 quat_list = [euler_to_quat(*angles) for angles in euler_list]
 
 
@@ -269,25 +273,39 @@ def lerp_using_eulers(v, t=0):
 
 
 # TODO: Implement Euler + Quat SPLINES to support > 2 points.
+def move_along_quat_spline(v, t=0):
+    global quat_list
+    assert len(quat_list) >= 4
+    # Remap t into correct, larger range
+    t *= len(quat_list) - 3  # e.g. 5 points => 3 legit points => tmax = 2 = 5 - 3.
+    quat_pts = [(i-1, quat) for i, quat in enumerate(quat_list)]
+    q = cubic_quat_spline(quat_pts, t)
+    return q.rotate_vector(v)
+
 
 # Vector to reorient using quaternions
 vector = np.array([0, 0, 300])
 # Main controlling parameter
 t = 0.
 # Path points
-euler_path, quat_path = [], []
+euler_path = []
+quat_path = []
+quat_spline_path = []
 
-# Show / hide  3D objects
+# Show / hide display objects
 show_axes = True
 show_cube = False
 show_sphere = True
 show_curr_vectors = True
 show_paths = True
+show_points = True
 
 
 # Main function
 def run():
-    global rho, phi, theta, v_rho, v_theta, v_phi, vector, t, show_axes, show_cube, show_sphere, show_curr_vectors, show_paths, euler_path, quat_path
+    global rho, phi, theta, v_rho, v_theta, v_phi, vector, t, show_axes, show_cube, show_sphere, show_curr_vectors,\
+        show_paths, show_points, euler_path, quat_path, quat_spline_path
+
     w.configure(background='black')
 
     while True:
@@ -303,6 +321,7 @@ def run():
             t = 0
             euler_path.clear()
             quat_path.clear()
+            quat_spline_path.clear()
 
         # 3D Axes Drawing –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
         colors = ['red', 'blue', 'purple']
@@ -326,18 +345,46 @@ def run():
         # Plot Current Point –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
         radius = 5
         if show_curr_vectors:
-            point = lerp_using_eulers(vector, t)
-            euler_path.append(point)
-            point = world_to_plane(point)
-            w.create_oval(point[0]-radius, point[1]-radius, point[0]+radius, point[1]+radius, fill='red')
-            point = slerp_using_quats(vector, t)
-            quat_path.append(point)
-            point = world_to_plane(point)
-            w.create_oval(point[0] - radius, point[1] - radius, point[0] + radius, point[1] + radius, fill='blue')
+            # Show SLERP vs. LERP
+            if len(quat_list) == 2:
+                w.create_text(window_w/2, 60, text='SLERP vs. LERP', fill='blue', font='Avenir 30')
+                point = lerp_using_eulers(vector, t)
+                euler_path.append(point)
+                point = world_to_plane(point)
+                w.create_oval(point[0]-radius, point[1]-radius, point[0]+radius, point[1]+radius, fill='red')
+                point = slerp_using_quats(vector, t)
+                quat_path.append(point)
+                point = world_to_plane(point)
+                w.create_oval(point[0] - radius, point[1] - radius, point[0] + radius, point[1] + radius, fill='blue')
 
-        if show_paths and len(euler_path) >= 2:
-            w.create_line(*list_world_to_plane(euler_path), fill='red')
-            w.create_line(*list_world_to_plane(quat_path), fill='blue')
+            # Show Quat Spline vs. Euler Spline
+            else:
+                w.create_text(window_w / 2, 60, text='QUAT SPLINE vs. EULER SPLINE', fill='blue', font='Avenir 30')
+                point = move_along_quat_spline(vector, t)
+                quat_spline_path.append(point)
+                point = world_to_plane(point)
+                w.create_oval(point[0] - radius, point[1] - radius, point[0] + radius, point[1] + radius, fill='blue')
+                # TODO: Implement Euler Angle spline
+
+        if show_paths:
+            if len(quat_list) == 2 and len(euler_path) > 2:
+                w.create_line(*list_world_to_plane(euler_path), fill='red')
+                w.create_line(*list_world_to_plane(quat_path), fill='blue')
+
+            elif len(quat_list) > 2 and len(quat_spline_path) > 2:
+                w.create_line(*list_world_to_plane(quat_spline_path), fill='blue')
+                # TODO: Implement Euler Angle spline
+
+        # Plot Target Orientation Points –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+        radius = 2
+        if show_points:
+            for i, q in enumerate(quat_list):
+                point = world_to_plane(q.rotate_vector(vector))
+                color = 'orange'
+                if i in {0, len(quat_list)-1}:
+                    color = 'purple'  # phantom point
+                w.create_oval(point[0] - radius, point[1] - radius, point[0] + radius, point[1] + radius, fill=color, outline='')
+
 
 
         # End run

@@ -19,6 +19,9 @@ class Quat:
     def __add__(self, other):
         return Quat(self.re + other.re, self.imag + other.imag)
 
+    def __sub__(self, other):
+        return self + (-1 * other)
+
     def __mul__(self, other):
         if isinstance(other, Quat):
             re = (self.re * other.re) - np.dot(self.imag, other.imag)
@@ -33,7 +36,7 @@ class Quat:
             return self * lhs
 
     def dot(self, other):
-        return (self.re * self.re) + np.dot(self.imag, other.imag)
+        return (self.re * other.re) + np.dot(self.imag, other.imag)
 
     def conj(self):
         return Quat(self.re, -self.imag)
@@ -45,7 +48,7 @@ class Quat:
         elif isinstance(other, float) or isinstance(other, int):
             return self * (1. / other)
 
-    def __str__(self):
+    def __repr__(self):
         return str(self.w) + " + " + str(self.x) + "i + " + str(self.y) + "j + " + str(self.z) + "k"
 
     def __eq__(self, other):
@@ -95,22 +98,32 @@ def cubic_quat_spline(quat_pts, t):
     assert len(quat_pts) >= 4
 
     # 1. Find the segment to evaluate on.
-    b0, b3, prev, nxt = None, None, None, None
-    for i in range(1, len(quat_pts)-1):
+    b0, b3, prev, nxt, left_idx = None, None, None, None, -1
+    for i in range(1, len(quat_pts)-2):
         q1, q2 = quat_pts[i], quat_pts[i+1]
         if q1[0] <= t <= q2[0]:
-            b0, b3 = q1, q2
-            prev = quat_pts[i-1]
-            next = quat_pts[i+2]
+            b0, b3 = q1[1], q2[1]
+            prev = quat_pts[i-1][1]
+            nxt = quat_pts[i+2][1]
+            left_idx = i
             break
 
-    assert b0 is not None
+    assert left_idx != -1
 
     # 2. Generate other 2 control points
-    b1 = Slerp(b0, SBisect(SDouble(prev, b0), b3), 1. / 3.)# if prev != None else ?
-    b2 = Slerp(b3, SBisect(b0, SDouble(nxt, b3)), 1. / 3.)# if nxt != None else ?
+    b1 = Slerp(b0, SBisect(SDouble(prev, b0), b3), 1. / 3.)
+    b2 = Slerp(b3, SBisect(b0, SDouble(nxt, b3)), 1. / 3.)
 
-    # 3. TODO: Squash t into interval and evaluate spline using 6 SLERPS
+    # 3. Squash t into interval and evaluate spline using 6 SLERPS
+    tmin, tmax = quat_pts[left_idx][0], quat_pts[left_idx+1][0]
+    u = (t - tmin) / (tmax - tmin)
+    middleSlerp = Slerp(b1, b2, u)
+    return Slerp(Slerp(Slerp(b0, b1, u), middleSlerp, u), Slerp(middleSlerp, Slerp(b2, b3, u), u), u)
+
+
+# TODO: Implement
+def cubic_euler_spline(euler_pts, t):
+    pass
 
 
 def euler_to_rotmat(theta_z, theta_y, theta_x):
