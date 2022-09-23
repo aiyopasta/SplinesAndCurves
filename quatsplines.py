@@ -58,7 +58,7 @@ def speedy_key_pressed(event):
     global v_rho, v_theta, v_phi, focus, w
 
     max_clicks = 10
-    m = 500
+    m = 800
     d2rho, d2phi, d2theta, dfocus = 3, np.pi / m, np.pi / m, 10
     if event.char == 'a':
         v_theta = max(v_theta - d2theta, -d2theta*max_clicks)
@@ -165,6 +165,14 @@ def world_to_plane(v):
     return (v_screen[:2] * np.array([1, -1])) + np.array([window_w/2, window_h/2])
 
 
+# 1000 IQ Genius Function
+def list_world_to_plane(l):
+    new_l = []
+    for v in l:
+        new_l.extend(world_to_plane(v).tolist())
+    return new_l
+
+
 def draw_cube(sidelen=400, vertex_radius=5):
     # Vertices in World Cartesian Coordinates
     l = sidelen / 2
@@ -236,14 +244,50 @@ def draw_uvsphere(center, radius, subdivs, color, tag, w):
                               fill=color, tag=tag+'f' + str(i) + str(j))
 
 
+# Construct list of orientations (in the form of Euler Angle triples (theta_z, theta_y, theta_x), i.e. zyx order)
+# To be absolutely clear: This means rotation about z-axis by theta_z, followed by rot about LOCAL y-axis by theta_y,
+# followed finally by rot about LOCAL x-axis by theta_x.
+euler_list = [(0, np.pi/4, 0), (0, 0, np.pi/2)]
+quat_list = [euler_to_quat(*angles) for angles in euler_list]
+
+
+# The actual method that produces the reoriented vector for a given t in [0,1], using an quaternion spline.
+def slerp_using_quats(v, t=0):
+    global quat_list
+    assert len(quat_list) == 2
+    q = Slerp(quat_list[0], quat_list[1], t)
+    return q.rotate_vector(v)
+
+
+# The actual method that produces the reoriented vector for a given t in [0,1], using an Euler angle spline.
+def lerp_using_eulers(v, t=0):
+    global euler_list
+    assert len(euler_list) == 2
+    o1, o2 = np.asarray(euler_list[0]), np.asarray(euler_list[1])  # o stands for "orientation"
+    R = euler_to_rotmat(*(((1 - t) * o1) + (t * o2)))
+    return np.dot(R, v)
+
+
+# TODO: Implement Euler + Quat SPLINES to support > 2 points.
+
+# Vector to reorient using quaternions
+vector = np.array([0, 0, 300])
+# Main controlling parameter
+t = 0.
+# Path points
+euler_path, quat_path = [], []
+
 # Show / hide  3D objects
 show_axes = True
 show_cube = False
 show_sphere = True
+show_curr_vectors = True
+show_paths = True
+
 
 # Main function
 def run():
-    global n, rho, phi, theta, v_rho, v_theta, v_phi
+    global rho, phi, theta, v_rho, v_theta, v_phi, vector, t, show_axes, show_cube, show_sphere, show_curr_vectors, show_paths, euler_path, quat_path
     w.configure(background='black')
 
     while True:
@@ -252,6 +296,13 @@ def run():
         rho += v_rho
         phi += v_phi
         theta += v_theta
+
+        # t Parameter update
+        t += 0.005
+        if t > 1:
+            t = 0
+            euler_path.clear()
+            quat_path.clear()
 
         # 3D Axes Drawing –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
         colors = ['red', 'blue', 'purple']
@@ -270,7 +321,24 @@ def run():
         # Sphere Drawing –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
         center, radius, subdivs = np.array([0, 0, 0]), 300, 20
         if show_sphere:
-            draw_uvsphere(center, radius, subdivs, _from_rgb((90, 30, 0)), 'potty', w)
+            draw_uvsphere(center, radius, subdivs, _from_rgb((30, 30, 0)), 'potty', w)
+
+        # Plot Current Point –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+        radius = 5
+        if show_curr_vectors:
+            point = lerp_using_eulers(vector, t)
+            euler_path.append(point)
+            point = world_to_plane(point)
+            w.create_oval(point[0]-radius, point[1]-radius, point[0]+radius, point[1]+radius, fill='red')
+            point = slerp_using_quats(vector, t)
+            quat_path.append(point)
+            point = world_to_plane(point)
+            w.create_oval(point[0] - radius, point[1] - radius, point[0] + radius, point[1] + radius, fill='blue')
+
+        if show_paths and len(euler_path) >= 2:
+            w.create_line(*list_world_to_plane(euler_path), fill='red')
+            w.create_line(*list_world_to_plane(quat_path), fill='blue')
+
 
         # End run
         w.update()

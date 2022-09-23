@@ -55,6 +55,9 @@ class Quat:
         assert self.x == self.y == self.z == 0.
         return self.w
 
+    def rotate_vector(self, v):
+        return (self * Quat(0, v) * self.inv()).imag
+
     @staticmethod
     def from_axis_angle(axis, angle):
         assert len(axis) == 3 and angle < np.pi  # must be a convex angle
@@ -108,3 +111,31 @@ def cubic_quat_spline(quat_pts, t):
     b2 = Slerp(b3, SBisect(b0, SDouble(nxt, b3)), 1. / 3.)# if nxt != None else ?
 
     # 3. TODO: Squash t into interval and evaluate spline using 6 SLERPS
+
+
+def euler_to_rotmat(theta_z, theta_y, theta_x):
+    rotmatZ = np.array([[np.cos(theta_z), -np.sin(theta_z), 0],
+                        [np.sin(theta_z), np.cos(theta_z), 0],
+                        [0, 0, 1]])
+
+    rotmatY = np.array([[np.cos(theta_y), 0, np.sin(theta_y)],
+                        [0, 1, 0],
+                        [-np.sin(theta_y), 0, np.cos(theta_y)]])
+
+    rotmatX = np.array([[1, 0, 0],
+                        [0, np.cos(theta_x), -np.sin(theta_x)],
+                        [0, np.sin(theta_x), np.cos(theta_x)]])
+
+    return np.dot(rotmatZ, np.dot(rotmatY, rotmatX))
+
+
+def euler_to_quat(theta_z, theta_y, theta_x):
+    R = euler_to_rotmat(theta_z, theta_y, theta_x)
+    w = 0.5 * np.sqrt(R[0][0] + R[1][1] + R[2][2] + 1)
+    x = (R[2][1] - R[1][2]) / (4 * w)
+    y = (R[0][2] - R[2][0]) / (4 * w)
+    z = (R[1][0] - R[0][1]) / (4 * w)
+    return Quat(w, np.array([x, y, z]))
+
+
+
