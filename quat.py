@@ -78,6 +78,14 @@ def SBisect(q1:Quat, q2:Quat):
     return q / q.length
 
 
+def Bisect(v1, v2):
+    return (v1 + v2) / 2.
+
+
+def Double(v1, v2):
+    return v1 + (2 * (v2 - v1))
+
+
 def SDouble(q1:Quat, q2:Quat):
     return (2 * q1.dot(q2) * q2) - q1
 
@@ -85,6 +93,37 @@ def SDouble(q1:Quat, q2:Quat):
 def Slerp(q1:Quat, q2:Quat, u):
     omega = angle(q1, q2)
     return ((np.sin((1-u) * omega) * q1) + (np.sin(omega * u) * q2)) / np.sin(omega)
+
+
+def lerp(a, b, t):
+    assert 0 <= t <= 1
+    return ((1 - t) * a) + (t * b)
+
+
+def angular_lerp(a, b, t):
+    a %= 2 * np.pi
+    b %= 2 * np.pi
+    if a == b:
+        return a
+
+    elif a < b:
+        if b - a <= np.pi:
+            return lerp(a, b, t)
+
+        # Else b - a > 180
+        return (a - lerp(0, (2 * np.pi) - b + a, t)) % (2 * np.pi)
+
+    # Else a > b
+    if a - b <= np.pi:
+        return (a - lerp(0, a - b, t)) % (2 * np.pi)
+
+    # Else a - b > 180
+    return (a + lerp(0, (2 * np.pi) - a + b, t)) % (2 * np.pi)
+
+
+def euler_angle_lerp(euler1, euler2, t):
+    assert len(euler1) == len(euler2) == 3
+    return np.array([angular_lerp(euler1[i], euler2[i], t) for i in range(3)])
 
 
 def cubic_quat_spline(quat_pts, t):
@@ -123,7 +162,32 @@ def cubic_quat_spline(quat_pts, t):
 
 # TODO: Implement
 def cubic_euler_spline(euler_pts, t):
-    pass
+    assert euler_pts[0][0] <= t <= euler_pts[-1][0]
+    assert len(euler_pts) >= 4
+
+    # 1. Find the segment to evaluate on.
+    b0, b3, prev, nxt, left_idx = None, None, None, None, -1
+    for i in range(1, len(euler_pts)-2):
+        p1, p2 = euler_pts[i], euler_pts[i+1]
+        if p1[0] <= t <= p2[0]:
+            b0, b3 = p1[1], p2[1]
+            prev = euler_pts[i-1][1]
+            nxt = euler_pts[i+2][1]
+            left_idx = i
+            break
+
+    assert left_idx != -1
+
+    # 2. Generate other 2 control points
+    b1 = euler_angle_lerp(b0, Bisect(Double(prev, b0), b3), 1. / 3.)
+    b2 = euler_angle_lerp(b3, Bisect(b0, Double(nxt, b3)), 1. / 3.)
+
+    # 3. Squash t into interval and evaluate spline using 6 LERPS
+    tmin, tmax = euler_pts[left_idx][0], euler_pts[left_idx+1][0]
+    u = (t - tmin) / (tmax - tmin)
+    middleLerp = euler_angle_lerp(b1, b2, u)
+    return euler_angle_lerp(euler_angle_lerp(euler_angle_lerp(b0, b1, u), middleLerp, u), euler_angle_lerp(middleLerp, euler_angle_lerp(b2, b3, u), u), u)
+
 
 
 def euler_to_rotmat(theta_z, theta_y, theta_x):
