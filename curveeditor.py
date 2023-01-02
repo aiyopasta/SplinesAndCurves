@@ -6,7 +6,7 @@ import numpy as np
 window_w = 1720
 window_h = 1000
 
-# Tkinter Setupc
+# Tkinter Setup
 root = Tk()
 root.title("Curve Fun")
 root.attributes("-topmost", True)
