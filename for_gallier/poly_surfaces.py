@@ -20,7 +20,7 @@ def A(v: np.ndarray):
 
 # Initialize the window
 config = pyglet.gl.Config(double_buffer=True, depth_size=24, major_version=3, minor_version=3)
-window = pyglet.window.Window(width=width, height=height, caption="Raw 3D + OpenGL 3D in one!", config=config)
+window = pyglet.window.Window(width=width, height=height, caption="Polynomial Surface Control Points", config=config)
 
 
 # REGULAR MATH FUNCTIONS ——————————————————————————————————————————————————————————————
@@ -69,15 +69,15 @@ homo = lambda v: np.array([*v, 1.0])  # homogenize
 dehomo = lambda v: v[:-1]  # dehomogenize
 
 # CREATE SHADER PROGRAM ————————————————————————————————————————————————————————————————————————————————————————————————
-vertex_src_einstein = open('vert.glsl').read()
-frag_src_einstein = open('frag.glsl').read()
+vertex_src_einstein = open('pyglet_tests/vert.glsl').read()
+frag_src_einstein = open('pyglet_tests/frag.glsl').read()
 program_einstein = ShaderProgram(Shader(vertex_src_einstein, 'vertex'),
                                  Shader(frag_src_einstein, 'fragment'))
 
 
 # CREATE VBO (slightly different way than others; i.e. using explicit vertex list face list)
 # Load in data
-mesh = trimesh.load_mesh('einstein.obj')
+mesh = trimesh.load_mesh('pyglet_tests/einstein.obj')
 mesh.vertices -= mesh.center_mass
 einstein_verts = mesh.vertices
 einstein_faces = mesh.faces
